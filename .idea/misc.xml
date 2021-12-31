@@ -5,6 +5,7 @@
       <map>
         <entry key="app/src/main/res/layout/activity_main.xml" value="0.22083333333333333" />
         <entry key="app/src/main/res/layout/payment_dialog.xml" value="0.23541666666666666" />
+        <entry key="app/src/main/res/layout/success_dialog.xml" value="0.2317948717948718" />
       </map>
     </option>
   </component>

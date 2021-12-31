@@ -3,22 +3,39 @@ package app.bensalcie.expresspay;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import android.app.Dialog;
 import android.app.ProgressDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
+import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.messaging.FirebaseMessaging;
 
+import java.util.HashMap;
 import java.util.Objects;
 
+import app.bensalcie.expresspay.interfaces.MpesaListener;
 import bensalcie.payhero.mpesa.mpesa.model.AccessToken;
 import bensalcie.payhero.mpesa.mpesa.model.STKPush;
 import bensalcie.payhero.mpesa.mpesa.model.STKResponse;
@@ -29,8 +46,11 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements MpesaListener {
     private DarajaApiClient darajaApiClient;
+
+    ProgressDialog mProgressDialog;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,10 +63,15 @@ public class MainActivity extends AppCompatActivity {
         );
         darajaApiClient.setIsDebug(true);
         getAccessToken();//make request availabe and ready for processing.
-
-
+        mProgressDialog = new ProgressDialog(MainActivity.this);
+        mProgressDialog.setTitle("Processing");
+        mProgressDialog.setMessage("Making payment...please wait");
 
     }
+
+
+
+
 
     private void getAccessToken() {
         darajaApiClient.setGetAccessToken(true);
@@ -88,13 +113,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void processPayment(String phone, String amount) {
-        ProgressDialog d = new ProgressDialog(this);
-        d.setTitle("Processing");
-        d.setMessage("Making payment...please wait");
-        d.show();
+
+
+
+        mProgressDialog.show();
+
 
         String timestamp = Utils.INSTANCE.getTimestamp();
-        STKPush stkPush = new STKPush("PAY TO CHURCH",amount,"174379","https://mydomain.com/path",
+        STKPush stkPush = new STKPush("PAY TO CHURCH",amount,"174379","https://us-central1-dev-apps-6f6e8.cloudfunctions.net/api/javacallback",
                 Objects.requireNonNull(Utils.INSTANCE.sanitizePhoneNumber(phone)), "174379", Objects.requireNonNull(Utils.INSTANCE.getPassword("174379",
                 "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919", Objects.requireNonNull(timestamp)))
                 , Objects.requireNonNull(Utils.INSTANCE.sanitizePhoneNumber(phone)), timestamp,"Trans. desc",Environment.TransactionType.CustomerPayBillOnline);
@@ -102,17 +128,23 @@ public class MainActivity extends AppCompatActivity {
         Objects.requireNonNull(darajaApiClient.mpesaService()).sendPush(stkPush).enqueue(new Callback<STKResponse>() {
             @Override
             public void onResponse(@NonNull Call<STKResponse> call, @NonNull Response<STKResponse> response) {
-                //process response here.
-                //You get things like:
-                //handle response here
-                //response contains CheckoutRequestID,CustomerMessage,MerchantRequestID,ResponseCode,ResponseDescription
-
-
-                d.dismiss();
                 Toast.makeText(MainActivity.this, "Response: "+response.body(), Toast.LENGTH_LONG).show();
                 Log.d("PAYMENTS", "onResponse: "+response.body());
                 if (response.body() != null) {
-                    Log.d("PAYMENTS", "onResponse: Time to process, confirm etc : "+response.body().component1());
+
+                    STKResponse stkResponse = response.body();
+                    FirebaseMessaging.getInstance().subscribeToTopic(stkResponse.getCheckoutRequestID()).addOnCompleteListener(task -> {
+                        if (task.isSuccessful()){
+                            Log.d("PAYMENTS",
+                                    "onResponse: Subscribed successfully  : "
+                            );
+                        }else{
+                            Log.d("PAYMENTS",
+                                    "onResponse: Subscribed unsuccessfull  : ${it.exception?.message}"
+                            );
+                        }
+                    });
+
 
                 }
 
@@ -130,4 +162,31 @@ public class MainActivity extends AppCompatActivity {
 
 
     }
+
+    @Override
+    public void sendSuccesfull(String amount, String phone, String date, String receipt) {
+        mProgressDialog.dismiss();
+            Toast.makeText(
+                    this, "Payment Succesfull\n" +
+                            "Receipt: $receipt\n" +
+                            "Date: $date\n" +
+                            "Phone: $phone\n" +
+                            "Amount: $amount", Toast.LENGTH_LONG
+            ).show();
+
+
+    }
+
+    @Override
+    public void sendFailed(String reason) {
+        mProgressDialog.dismiss();
+
+        Toast.makeText(
+                    this, "Payment Failed\n" +
+                            "Reason: $reason"
+                    , Toast.LENGTH_LONG
+            ).show();
+        }
+
+
 }
