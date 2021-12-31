@@ -45,6 +45,9 @@ dependencies {
     implementation 'com.google.firebase:firebase-database:19.3.0'
     implementation 'com.google.firebase:firebase-core:17.4.3'
     implementation 'com.google.code.gson:gson:2.8.9'
+    implementation 'org.jetbrains.anko:anko-common:0.9'
+    implementation 'com.firebaseui:firebase-ui-database:5.0.0'
+
 
 
 }

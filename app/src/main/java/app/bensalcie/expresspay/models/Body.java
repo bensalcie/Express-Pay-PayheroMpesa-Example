@@ -1,17 +1,17 @@
 package app.bensalcie.expresspay.models;
 
 public class Body {
-    private StkCallback StkCallback;
+    private StkCallback stkCallback;
 
-    public app.bensalcie.expresspay.models.StkCallback getStkCallback() {
-        return StkCallback;
+    public StkCallback getStkCallback() {
+        return stkCallback;
     }
 
-    public void setStkCallback(app.bensalcie.expresspay.models.StkCallback stkCallback) {
-        StkCallback = stkCallback;
+    public void setStkCallback(StkCallback stkCallback) {
+        this.stkCallback = stkCallback;
     }
 
-    public Body(app.bensalcie.expresspay.models.StkCallback stkCallback) {
-        StkCallback = stkCallback;
+    public Body(StkCallback stkCallback) {
+        this.stkCallback = stkCallback;
     }
 }
