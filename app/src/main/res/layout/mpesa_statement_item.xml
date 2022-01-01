@@ -14,12 +14,16 @@
         <ImageView
             android:layout_width="match_parent"
             android:layout_weight="2"
-            android:src="@drawable/mpesa"
+            android:layout_margin="4dp"
+            android:scaleType="centerCrop"
+            android:padding="4dp"
+            android:src="@drawable/mp"
             android:layout_height="60dp"/>
         <LinearLayout
             android:layout_width="match_parent"
             android:orientation="vertical"
             android:layout_weight="1"
+            android:layout_margin="4dp"
             android:layout_height="wrap_content">
             <com.google.android.material.textview.MaterialTextView
                 android:layout_width="match_parent"

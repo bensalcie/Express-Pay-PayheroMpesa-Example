@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.annotation.SuppressLint;
 import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
@@ -41,10 +42,16 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.messaging.FirebaseMessaging;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Objects;
 
-import app.bensalcie.expresspay.interfaces.MpesaListener;
 import app.bensalcie.expresspay.models.Transaction;
 import bensalcie.payhero.mpesa.mpesa.model.AccessToken;
 import bensalcie.payhero.mpesa.mpesa.model.STKPush;
@@ -56,7 +63,7 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class MainActivity extends AppCompatActivity implements MpesaListener {
+public class MainActivity extends AppCompatActivity {
     public static MainActivity mpesalistener;
     private DarajaApiClient darajaApiClient;
 
@@ -135,12 +142,9 @@ public class MainActivity extends AppCompatActivity implements MpesaListener {
 
     private void processPayment(String phone, String amount) {
 
-
         mProgressDialog.show();
-
-
         String timestamp = Utils.INSTANCE.getTimestamp();
-        STKPush stkPush = new STKPush("PAY TO CHURCH", amount, "174379", "https://us-central1-dev-apps-6f6e8.cloudfunctions.net/api/myCallbackUrl",
+        STKPush stkPush = new STKPush("PAY TO CHURCH", amount, "174379", "https://bensalcie.payherokenya.com/expresspay/callback.php",
                 Objects.requireNonNull(Utils.INSTANCE.sanitizePhoneNumber(phone)), "174379", Objects.requireNonNull(Utils.INSTANCE.getPassword("174379",
                 "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919", Objects.requireNonNull(timestamp)))
                 , Objects.requireNonNull(Utils.INSTANCE.sanitizePhoneNumber(phone)), timestamp, "Trans. desc", Environment.TransactionType.CustomerPayBillOnline);
@@ -151,21 +155,23 @@ public class MainActivity extends AppCompatActivity implements MpesaListener {
 //                Toast.makeText(MainActivity.this, "Response: "+response.body(), Toast.LENGTH_LONG).show();
                 Log.d("PAYMENTS", "onResponse: " + response.body());
                 if (response.body() != null) {
-
                     STKResponse stkResponse = response.body();
-                    FirebaseMessaging.getInstance().subscribeToTopic(stkResponse.getCheckoutRequestID()).addOnCompleteListener(task -> {
-                        if (task.isSuccessful()) {
-                            Log.d("PAYMENTS",
-                                    "onResponse: Subscribed successfully"
-                            );
-                        } else {
-                            Log.d("PAYMENTS",
-                                    "onResponse: Subscribed unsuccessfull"
-                            );
+                    databaseReference.child("PAYMENTS").child(stkResponse.getCheckoutRequestID()).setValue(userId).addOnCompleteListener(new OnCompleteListener<Void>() {
+                        @Override
+                        public void onComplete(@NonNull Task<Void> task) {
+
+                            if (task.isSuccessful()){
+
+                                listenToPayments(stkResponse.getCheckoutRequestID());
+                            }else {
+                                mProgressDialog.dismiss();
+                                d.dismiss();
+
+                                Toast.makeText(MainActivity.this, task.getException().getMessage(), Toast.LENGTH_SHORT).show();
+
+                            }
                         }
                     });
-
-
                 }
 
             }
@@ -182,47 +188,26 @@ public class MainActivity extends AppCompatActivity implements MpesaListener {
 
     }
 
-    @Override
-    public void sendSuccesfull(String amount, String phone, String date, String receipt) {
-
-        DatabaseReference finalRef = databaseReference.child(userId);
-
-
-        String paymentkey = finalRef.push().getKey();
-        HashMap<String, Object> paymentDetails = new HashMap<>();
-        paymentDetails.put("Receipt", receipt);
-        paymentDetails.put("Date", date);
-        paymentDetails.put("Phone", phone);
-        paymentDetails.put("Amount", amount);
-        paymentDetails.put("PaymentId", paymentkey);
-        assert paymentkey != null;
-        finalRef.child(paymentkey).updateChildren(paymentDetails).addOnCompleteListener(new OnCompleteListener<Void>() {
+    private void listenToPayments(String checkoutRequestID) {
+        databaseReference.child("PAYMENTS").child(userId).child(checkoutRequestID).addValueEventListener(new ValueEventListener() {
             @Override
-            public void onComplete(@NonNull Task<Void> task) {
-                d.dismiss();
-                mProgressDialog.dismiss();
-                if (task.isSuccessful()) {
-                    runOnUiThread(() -> Toast.makeText(
-                            MainActivity.this, "Payment Succesfull", Toast.LENGTH_LONG).show());
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                String status = String.valueOf(snapshot.child("status").getValue());
+                if (status.contains("COMPLETED")){
+                    mProgressDialog.dismiss();
+                    d.dismiss();
+                    Toast.makeText(MainActivity.this, "Transaction completed successfully", Toast.LENGTH_SHORT).show();
                 }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
 
             }
         });
-
-
     }
 
-    @Override
-    public void sendFailed(String reason) {
-        mProgressDialog.dismiss();
-        runOnUiThread(() -> Toast.makeText(
-                MainActivity.this, "Payment Failed\n" +
-                        "Reason: " + reason
-                , Toast.LENGTH_LONG
-        ).show());
 
-
-    }
 
     @Override
     protected void onStart() {
@@ -230,14 +215,27 @@ public class MainActivity extends AppCompatActivity implements MpesaListener {
         progressBar.setVisibility(View.VISIBLE);
         databaseReference.keepSynced(true);
         FirebaseRecyclerOptions<Transaction> options = new FirebaseRecyclerOptions.Builder<Transaction>()
-                .setQuery(databaseReference.child(userId), Transaction.class)
+                .setQuery(databaseReference.child("PAYMENTS").child(userId), Transaction.class)
                 .build();
 
         final FirebaseRecyclerAdapter<Transaction, productsViewHolder> adapter = new FirebaseRecyclerAdapter<Transaction, productsViewHolder>(options) {
+            @SuppressLint("NewApi")
             @Override
             protected void onBindViewHolder(@NonNull productsViewHolder holder, int position, @NonNull final Transaction model) {
-                holder.tvRefcode.setText(model.getReceipt());
-                holder.tvReBody.setText("KSh. "+model.getAmount() + "\nFrom : "+model.getAmount()+"\n"+model.getDate());
+
+                // milliseconds
+
+//                // Creating date format
+//                DateFormat simple = new SimpleDateFormat("dd MMM yyyy HH:mm ", Locale.US);
+//
+//                // Creating date from milliseconds
+//                // using Date() constructor
+//                Date result = new Date(model.getTransactiondate());
+
+                // Formatting Date according to the
+                // given format
+                holder.tvRefcode.setText(model.getStatus());
+                holder.tvReBody.setText(model.getConfirmation_code()+"\nKSh. "+model.getAmount() + " Paid to XYZ CHURCH \nFrom : "+model.getMsisdn()+"\n"+model.getTransactiondate());
 
 
 
